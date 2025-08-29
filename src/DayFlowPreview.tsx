@@ -212,6 +212,7 @@ function DraggableTimelineItem(props: {
 
 /* ---------- Main ---------- */
 export default function DayFlowPreview() {
+  const [timelineTitle, setTimelineTitle] = useState("My Wedding Timeline"); // NEW
   const [date, setDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [startTime, setStartTime] = useState("11:00");
   const [endTime, setEndTime] = useState("20:00");
@@ -221,7 +222,10 @@ export default function DayFlowPreview() {
   const [selected, setSelected] = useState<Item | null>(null);
   const [demoMode] = useState(true);
 
-  const totalMinutes = useMemo(() => clamp(minutesBetween(startTime, endTime), 60, 18 * 60), [startTime, endTime]);
+  const totalMinutes = useMemo(
+    () => clamp(minutesBetween(startTime, endTime), 60, 18 * 60),
+    [startTime, endTime]
+  );
 
   // Zoom controls
   const [pxPerMin, setPxPerMin] = useState(2);
@@ -231,10 +235,14 @@ export default function DayFlowPreview() {
     const p = Math.max(1, Math.floor(h / Math.max(60, totalMinutes)));
     setPxPerMin(p);
   }
-  useEffect(() => { fitToViewport(); }, [totalMinutes]);
+  useEffect(() => {
+    fitToViewport();
+  }, [totalMinutes]);
 
   // DnD
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
   const [draggingPreset, setDraggingPreset] = useState<PresetDef | null>(null);
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -247,11 +255,15 @@ export default function DayFlowPreview() {
   }
 
   function handleDragEnd(ev: any) {
-    if (!gridRef.current) { setDraggingPreset(null); setDraggingItemId(null); return; }
+    if (!gridRef.current) {
+      setDraggingPreset(null);
+      setDraggingItemId(null);
+      return;
+    }
     const rect = gridRef.current.getBoundingClientRect();
     const pointerY =
       (ev?.active?.rect?.current?.translated?.top ?? 0) +
-      ((ev?.active?.rect?.current?.translated?.height ?? 0) / 2);
+      (ev?.active?.rect?.current?.translated?.height ?? 0) / 2;
     const relY = Math.max(0, Math.min(gridHeight, pointerY - rect.top));
     let offsetMin = Math.round(relY / pxPerMin);
     if (snap) offsetMin = Math.round(offsetMin / slotSize) * slotSize;
@@ -265,37 +277,70 @@ export default function DayFlowPreview() {
         color: draggingPreset.color || BRAND.sand,
         notes: "",
       };
-      setItems((prev) => (demoMode && prev.length >= 100 ? prev : [...prev, newItem]));
+      setItems((prev) =>
+        demoMode && prev.length >= 100 ? prev : [...prev, newItem]
+      );
     }
     if (draggingItemId) {
       setItems((prev) =>
         prev.map((i) =>
           i.id === draggingItemId
-            ? { ...i, startMin: clamp(offsetMin, 0, Math.max(0, totalMinutes - i.durationMin)) }
+            ? {
+                ...i,
+                startMin: clamp(
+                  offsetMin,
+                  0,
+                  Math.max(0, totalMinutes - i.durationMin)
+                ),
+              }
             : i
         )
       );
     }
-    setDraggingPreset(null); setDraggingItemId(null);
+    setDraggingPreset(null);
+    setDraggingItemId(null);
   }
 
   // Editor actions
-  function upsertItem(u: Item) { setItems((prev) => prev.map((i) => (i.id === u.id ? u : i))); setSelected(null); }
-  function deleteItem(id: string) { setItems((prev) => prev.filter((i) => i.id !== id)); setSelected(null); }
-
-  // Export (text)
-  function exportText() {
-    const lines = items.slice().sort((a, b) => a.startMin - b.startMin)
-      .map((i) => {
-        const base = `${timeLabelFromOffset(date, startTime, i.startMin)} — ${i.title} (${i.durationMin} min)`;
-        return i.notes ? `${base}\n    Notes: ${i.notes}` : base;
-      }).join("\n");
-    const blob = new Blob([`DayFlow — ${format(parseISO(date + "T00:00:00"), "PPP")}\n\n${lines}`], { type: "text/plain" });
-    const url = URL.createObjectURL(blob); const a = document.createElement("a");
-    a.href = url; a.download = `DayFlow-${date}.txt`; a.click(); URL.revokeObjectURL(url);
+  function upsertItem(u: Item) {
+    setItems((prev) => prev.map((i) => (i.id === u.id ? u : i)));
+    setSelected(null);
+  }
+  function deleteItem(id: string) {
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    setSelected(null);
   }
 
-  // Export (ics)
+  // Export (text) — includes title
+  function exportText() {
+    const lines = items
+      .slice()
+      .sort((a, b) => a.startMin - b.startMin)
+      .map((i) => {
+        const base = `${timeLabelFromOffset(
+          date,
+          startTime,
+          i.startMin
+        )} — ${i.title} (${i.durationMin} min)`;
+        return i.notes ? `${base}\n    Notes: ${i.notes}` : base;
+      })
+      .join("\n");
+
+    const header = `${timelineTitle || "DayFlow Timeline"}\nDayFlow — ${format(
+      parseISO(date + "T00:00:00"),
+      "PPP"
+    )}\n\n`;
+
+    const blob = new Blob([header + lines], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `DayFlow-${date}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Export (ics) — includes title as calendar name
   async function exportICS() {
     const ics = await import("ics");
     const events = items.map((i) => {
@@ -303,31 +348,63 @@ export default function DayFlowPreview() {
       const startDate = parseISO(date + "T00:00:00");
       const start = setHours(setMinutes(startDate, sm + i.startMin), sh);
       const end = addMinutes(start, i.durationMin);
-      const s = [start.getFullYear(), start.getMonth() + 1, start.getDate(), start.getHours(), start.getMinutes()] as [number, number, number, number, number];
-      const e = [end.getFullYear(), end.getMonth() + 1, end.getDate(), end.getHours(), end.getMinutes()] as [number, number, number, number, number];
-      return { title: i.title, start: s, end: e, description: i.notes || "Created with DayFlow by Dostal Digital" } as any;
+      const s = [
+        start.getFullYear(),
+        start.getMonth() + 1,
+        start.getDate(),
+        start.getHours(),
+        start.getMinutes(),
+      ] as [number, number, number, number, number];
+      const e = [
+        end.getFullYear(),
+        end.getMonth() + 1,
+        end.getDate(),
+        end.getHours(),
+        end.getMinutes(),
+      ] as [number, number, number, number, number];
+      return {
+        title: i.title,
+        start: s,
+        end: e,
+        description: i.notes || "Created with DayFlow by Dostal Digital",
+      } as any;
     });
-    const { error, value } = ics.createEvents(events);
-    if (error) { alert(String(error)); return; }
+    const { error, value } = ics.createEvents(events, {
+      calName: timelineTitle || "DayFlow Timeline",
+    } as any);
+    if (error) {
+      alert(String(error));
+      return;
+    }
     const blob = new Blob([value || ""], { type: "text/calendar" });
-    const url = URL.createObjectURL(blob); const a = document.createElement("a");
-    a.href = url; a.download = `DayFlow-${date}.ics`; a.click(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `DayFlow-${date}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   /* --------- LANE LAYOUT (overlaps side-by-side) --------- */
   type Placed = { id: string; lane: number };
   const laneLayout = useMemo(() => {
-    const sorted = [...items].sort((a,b) => a.startMin - b.startMin || b.durationMin - a.durationMin);
+    const sorted = [...items].sort(
+      (a, b) => a.startMin - b.startMin || b.durationMin - a.durationMin
+    );
     const laneEnds: number[] = [];
     const placed: Placed[] = [];
     for (const it of sorted) {
-      let lane = laneEnds.findIndex(end => end <= it.startMin);
-      if (lane === -1) { lane = laneEnds.length; laneEnds.push(it.startMin + it.durationMin); }
-      else { laneEnds[lane] = it.startMin + it.durationMin; }
+      let lane = laneEnds.findIndex((end) => end <= it.startMin);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(it.startMin + it.durationMin);
+      } else {
+        laneEnds[lane] = it.startMin + it.durationMin;
+      }
       placed.push({ id: it.id, lane });
     }
     const lanesCount = Math.max(1, laneEnds.length);
-    const byId = Object.fromEntries(placed.map(p => [p.id, p.lane]));
+    const byId = Object.fromEntries(placed.map((p) => [p.id, p.lane]));
     return { lanesCount, byId };
   }, [items]);
 
@@ -336,7 +413,9 @@ export default function DayFlowPreview() {
   /* --------- Apply palette (recolor all items) --------- */
   function applyPalette(colors: string[]) {
     if (!colors?.length) return;
-    setItems(prev => prev.map((it, idx) => ({ ...it, color: colors[idx % colors.length] })));
+    setItems((prev) =>
+      prev.map((it, idx) => ({ ...it, color: colors[idx % colors.length] }))
+    );
   }
 
   return (
@@ -363,123 +442,149 @@ export default function DayFlowPreview() {
         </div>
       </header>
 
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={rectIntersection}>
-       <main className="mx-auto max-w-7xl px-4 py-6">
-  {/* Two-column layout: left = 1/3, right = 2/3 */}
-  <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-    {/* LEFT COLUMN (1/3): stacked */}
-    <div className="lg:col-span-1 flex flex-col gap-6">
-      {/* Event Settings */}
-      <section>
-        <SettingsPanel
-          date={date} setDate={setDate}
-          startTime={startTime} setStartTime={setStartTime}
-          endTime={endTime} setEndTime={setEndTime}
-          slotSize={slotSize} setSlotSize={setSlotSize}
-          snap={snap} setSnap={setSnap}
-          pxPerMin={pxPerMin} setPxPerMin={setPxPerMin}
-          fitToViewport={fitToViewport}
-        />
-      </section>
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        collisionDetection={rectIntersection}
+      >
+        <main className="mx-auto max-w-7xl px-4 py-6">
+          {/* Two-column layout: left = 1/3, right = 2/3 */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* LEFT COLUMN (1/3): stacked */}
+            <div className="lg:col-span-1 flex flex-col gap-6">
+              {/* Event Settings */}
+              <section>
+                <SettingsPanel
+                  timelineTitle={timelineTitle}
+                  setTimelineTitle={setTimelineTitle}
+                  date={date}
+                  setDate={setDate}
+                  startTime={startTime}
+                  setStartTime={setStartTime}
+                  endTime={endTime}
+                  setEndTime={setEndTime}
+                  slotSize={slotSize}
+                  setSlotSize={setSlotSize}
+                  snap={snap}
+                  setSnap={setSnap}
+                  pxPerMin={pxPerMin}
+                  setPxPerMin={setPxPerMin}
+                  fitToViewport={fitToViewport}
+                />
+              </section>
 
-      {/* Drag & Drop Presets — sits directly under Event Settings now */}
-      <section className="flex">
-        <div className="flex h-full w-full flex-col rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-700">Drag & Drop Presets</h3>
-          <div className="space-y-2">
-            {PRESETS.map((p) => (<DraggablePreset key={p.key} preset={p} />))}
-          </div>
-          <p className="mt-3 text-xs text-gray-500">
-            Drag a preset onto the timeline. After it’s placed, drag it again to change its time.
-          </p>
-        </div>
-      </section>
-    </div>
-
-    {/* RIGHT COLUMN (2/3): stacked */}
-    <div className="lg:col-span-2 flex flex-col gap-6">
-      {/* TIMELINE */}
-      <section>
-        <h2 className="mb-2 text-sm font-semibold tracking-wide text-gray-700">Timeline</h2>
-        <div className="overflow-hidden rounded-2xl border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between border-b bg-white px-4 py-3">
-            <div className="flex items-center gap-3 text-gray-700">
-              <Clock className="h-4 w-4" />
-              <div className="text-sm">
-                {format(parseISO(date + "T00:00:00"), "PPP")} • {startTime}–{endTime} • {slotSize}-min slots
-              </div>
-            </div>
-            <div className="text-xs text-gray-500">Drag presets here</div>
-          </div>
-
-          {/* Timeline canvas */}
-          <div className="relative bg-white" style={{ height: gridHeight + 40 }} ref={gridRef}>
-            {/* left ruler */}
-            <div className="absolute left-0 top-0 w-28 select-none bg-white">
-              {Array.from({ length: Math.floor(totalMinutes / slotSize) + 1 }).map((_, idx) => {
-                const y = idx * slotSize * pxPerMin;
-                const label = idx % (60 / slotSize) === 0 ? timeLabelFromOffset(date, startTime, idx * slotSize) : "";
-                return (
-                  <div key={idx} className="relative h-[2px]" style={{ top: y }}>
-                    <div className="absolute -translate-y-1/2 text-[10px] text-gray-700">{label}</div>
+              {/* Drag & Drop Presets */}
+              <section className="flex">
+                <div className="flex h-full w-full flex-col rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-700">
+                    Drag & Drop Presets
+                  </h3>
+                  <div className="space-y-2">
+                    {PRESETS.map((p) => (
+                      <DraggablePreset key={p.key} preset={p} />
+                    ))}
                   </div>
-                );
-              })}
+                  <p className="mt-3 text-xs text-gray-500">
+                    Drag a preset onto the timeline. After it’s placed, drag it again to change its time.
+                  </p>
+                </div>
+              </section>
             </div>
 
-            {/* grid + items */}
-            <div className="absolute right-0 top-0" style={{ left: "7rem" }}>
-              {Array.from({ length: Math.floor(totalMinutes / slotSize) + 1 }).map((_, idx) => {
-                const y = idx * slotSize * pxPerMin;
-                const isHour = idx % (60 / slotSize) === 0;
-                return (
-                  <div
-                    key={idx}
-                    className="absolute w-full border-t"
-                    style={{ top: y, borderColor: isHour ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.08)" }}
-                  />
-                );
-              })}
-              {items.map((it) => {
-                const top = it.startMin * pxPerMin;
-                const h = it.durationMin * pxPerMin;
-                const lane = laneLayout.byId[it.id] ?? 0;
-                const laneWidthPct = 100 / laneLayout.lanesCount;
-                return (
-                  <DraggableTimelineItem
-                    key={it.id}
-                    item={it}
-                    top={top}
-                    height={h}
-                    leftPct={lane * laneWidthPct}
-                    widthPct={laneWidthPct}
-                    onClick={() => setSelected(it)}
-                  />
-                );
-              })}
+            {/* RIGHT COLUMN (2/3): stacked */}
+            <div className="lg:col-span-2 flex flex-col gap-6">
+              {/* TIMELINE */}
+              <section>
+                <h2 className="mb-2 text-sm font-semibold tracking-wide text-gray-700">
+                  {timelineTitle || "Timeline"}
+                </h2>
+                <div className="overflow-hidden rounded-2xl border border-gray-200 shadow-sm">
+                  <div className="flex items-center justify-between border-b bg-white px-4 py-3">
+                    <div className="flex items-center gap-3 text-gray-700">
+                      <Clock className="h-4 w-4" />
+                      <div className="text-sm">
+                        {format(parseISO(date + "T00:00:00"), "PPP")} • {startTime}–{endTime} • {slotSize}-min slots
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500">Drag presets here</div>
+                  </div>
+
+                  {/* Timeline canvas */}
+                  <div className="relative bg-white" style={{ height: gridHeight + 40 }} ref={gridRef}>
+                    {/* left ruler */}
+                    <div className="absolute left-0 top-0 w-28 select-none bg-white">
+                      {Array.from({ length: Math.floor(totalMinutes / slotSize) + 1 }).map((_, idx) => {
+                        const y = idx * slotSize * pxPerMin;
+                        const label =
+                          idx % (60 / slotSize) === 0
+                            ? timeLabelFromOffset(date, startTime, idx * slotSize)
+                            : "";
+                        return (
+                          <div key={idx} className="relative h-[2px]" style={{ top: y }}>
+                            <div className="absolute -translate-y-1/2 text-[10px] text-gray-700">
+                              {label}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* grid + items */}
+                    <div className="absolute right-0 top-0" style={{ left: "7rem" }}>
+                      {Array.from({ length: Math.floor(totalMinutes / slotSize) + 1 }).map((_, idx) => {
+                        const y = idx * slotSize * pxPerMin;
+                        const isHour = idx % (60 / slotSize) === 0;
+                        return (
+                          <div
+                            key={idx}
+                            className="absolute w-full border-t"
+                            style={{
+                              top: y,
+                              borderColor: isHour ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.08)",
+                            }}
+                          />
+                        );
+                      })}
+                      {items.map((it) => {
+                        const top = it.startMin * pxPerMin;
+                        const h = it.durationMin * pxPerMin;
+                        const lane = laneLayout.byId[it.id] ?? 0;
+                        const laneWidth = 100 / laneLayout.lanesCount;
+                        return (
+                          <DraggableTimelineItem
+                            key={it.id}
+                            item={it}
+                            top={top}
+                            height={h}
+                            leftPct={lane * laneWidth}
+                            widthPct={laneWidth}
+                            onClick={() => setSelected(it)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Palettes */}
+              <section className="flex">
+                <PalettesPanel
+                  className="h-full w-full"
+                  onApplyPalette={(colors) => {
+                    applyPalette(colors);
+                  }}
+                />
+              </section>
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* Wedding Color Palettes — sits directly under Timeline now */}
-      <section className="flex">
-        <PalettesPanel
-          className="h-full w-full"
-          onApplyPalette={(colors) => {
-            setItems(prev => prev.map((it, idx) => ({ ...it, color: colors[idx % colors.length] })));
-          }}
-        />
-      </section>
-    </div>
-  </div>
-
-  {/* Pricing full width */}
-  <div className="mt-6">
-    <PricingPanel fullWidth />
-  </div>
-</main>
-
+          {/* Pricing full width */}
+          <div className="mt-6">
+            <PricingPanel fullWidth />
+          </div>
+        </main>
 
         {/* Drag preview */}
         <DragOverlay>
@@ -513,6 +618,7 @@ export default function DayFlowPreview() {
 /* ---------- Panels & Modal ---------- */
 
 function SettingsPanel(props: {
+  timelineTitle: string; setTimelineTitle: (v: string) => void; // NEW
   date: string; setDate: (v: string) => void;
   startTime: string; setStartTime: (v: string) => void;
   endTime: string; setEndTime: (v: string) => void;
@@ -521,11 +627,29 @@ function SettingsPanel(props: {
   pxPerMin: number; setPxPerMin: (fn: (p: number) => number) => void;
   fitToViewport: () => void;
 }) {
-  const { date, setDate, startTime, setStartTime, endTime, setEndTime, slotSize, setSlotSize, snap, setSnap, setPxPerMin, fitToViewport } = props;
+  const {
+    timelineTitle, setTimelineTitle,
+    date, setDate, startTime, setStartTime, endTime, setEndTime,
+    slotSize, setSlotSize, snap, setSnap, setPxPerMin, fitToViewport
+  } = props;
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-700">Event Settings</h3>
-      <div className="grid grid-cols-2 gap-3">
+
+      {/* Title Field */}
+      <label className="block text-xs text-gray-600">
+        Timeline Title
+        <input
+          type="text"
+          value={timelineTitle}
+          onChange={(e) => setTimelineTitle(e.target.value)}
+          placeholder="Johnson Wedding | Sarah & Sam"
+          className="mt-1 w-full rounded-lg border px-2 py-1 text-sm"
+        />
+      </label>
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
         <label className="text-xs text-gray-600">Date
           <input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 w-full rounded-lg border px-2 py-1 text-sm" />
         </label>

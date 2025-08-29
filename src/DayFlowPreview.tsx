@@ -230,11 +230,13 @@ export default function DayFlowPreview() {
   // Zoom controls
   const [pxPerMin, setPxPerMin] = useState(2);
   const gridHeight = totalMinutes * pxPerMin;
-  function fitToViewport() {
-    const h = Math.max(420, Math.floor(window.innerHeight * 0.75));
-    const p = Math.max(1, Math.floor(h / Math.max(60, totalMinutes)));
-    setPxPerMin(p);
-  }
+ function fitToViewport() {
+  // Leave room for header, toolbar, margins, etc.
+  const usable = Math.max(380, window.innerHeight - 360);
+  const p = Math.max(1, Math.floor(usable / Math.max(60, totalMinutes)));
+  setPxPerMin(p);
+}
+
   useEffect(() => {
     fitToViewport();
   }, [totalMinutes]);
@@ -511,10 +513,14 @@ export default function DayFlowPreview() {
                   </div>
 
                   {/* Timeline canvas */}
-                  <div className="relative bg-white" style={{ height: gridHeight + 40 }} ref={gridRef}>
+                  <div
+                    className="relative bg-white"
+                    style={{ height: gridHeight + 60 }}  // was +40
+                    ref={gridRef}
+                    >
                     {/* left ruler */}
                     <div className="absolute left-0 top-0 w-28 select-none bg-white">
-                      {Array.from({ length: Math.floor(totalMinutes / slotSize) + 1 }).map((_, idx) => {
+                      {Array.from({ length: Math.ceil(totalMinutes / slotSize) + 2 }).map((_, idx) => {
                         const y = idx * slotSize * pxPerMin;
                         const label =
                           idx % (60 / slotSize) === 0
@@ -532,7 +538,7 @@ export default function DayFlowPreview() {
 
                     {/* grid + items */}
                     <div className="absolute right-0 top-0" style={{ left: "7rem" }}>
-                      {Array.from({ length: Math.floor(totalMinutes / slotSize) + 1 }).map((_, idx) => {
+                      {Array.from({ length: Math.ceil(totalMinutes / slotSize) + 2 }).map((_, idx) => {
                         const y = idx * slotSize * pxPerMin;
                         const isHour = idx % (60 / slotSize) === 0;
                         return (
